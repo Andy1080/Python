@@ -56,7 +56,13 @@ def calculateFrequencies(df, include_bigrams = True):
         en_tweets = group[group['language'] == 'en'].pop('tweet') # Takes tweets marked as English only.
         tokens = []
         for txt in en_tweets.values:
-            tokens.extend([t.lower().strip('",:,.,#,?,;,!),(') for t in txt.split()]) # Removes punctuation and hashtags.
+            try:
+                tokens.extend([t.lower().strip('",:,.,#,?,;,!),(') for t in txt.split()]) # Removes punctuation and hashtags.
+            except BaseException, e:
+                print "Something has gone wrong {}".format(str(e))
+                print "======================="
+                print txt
+                print "======================="
 
         # Removes empty strings (comment/uncomment as you please).
         tokens = [c for c in tokens if c]
