@@ -14,7 +14,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime, timedelta
-from flask import Flask, request, send_file
+from networkx.readwrite import json_graph
+import json
+from flask import Flask, request, send_file, url_for
 
 app = Flask(__name__)
 
@@ -42,14 +44,6 @@ def show_company_prices(companyName):
     data = rq.get(API_BASE, params=payload)
     return data.text
 
-@app.route('/get_image')
-def return_image():
-    fig = plt.figure(figsize=[10,5])
-    ax = fig.add_subplot(111)
-    ax.plot(np.linspace(0,10), np.linspace(0,10)**2)
-    fig.savefig('./test.png',bbox_inches="tight")    
-    return send_file('test.png', mimetype='image/png')
-
 @app.route('/network')
 def covariance_matrix():
     now = datetime.now()
@@ -57,7 +51,7 @@ def covariance_matrix():
     endDate = endDate.strftime("%Y-%m-%d")    
     startDate = now - timedelta(days=7)
     startDate = startDate.strftime("%Y-%m-%d")
-    companies = ["BABA","AMZN","MSFT","YHOO", "GOOG","IBM","DELL",
+    companies = ["BABA","AMZN","MSFT","YHOO", "GOOG","IBM",#"DELL",
                  "FB", "MER", "GS", "C", "JPM"]
     data = np.zeros(shape=(len(companies), 7-2), dtype=float)
     i = 0
@@ -77,17 +71,19 @@ def covariance_matrix():
             print response
     
     correlation = np.corrcoef(data)
-    correlation = np.where(abs(correlation)<0.5,0,correlation)
+    correlation = np.where(abs(correlation)<0.75,0,correlation)
     G = nx.Graph(correlation)
+    nx.set_node_attributes(G,'company',{ix:company for ix,company in enumerate(companies)})
     
     if request.args.get('data')=='True':
-        return str(correlation)
+        jsonNetwork = json_graph.node_link_data(G)
+        return json.dumps(jsonNetwork)
     else:
         fig = plt.figure(figsize=[10,10])
         nx.draw_networkx(G, 
                          width=[2*abs(x[2]['weight']) for x in G.edges(data=1)],
                          edge_color=[1-2*(x[2]['weight']<0) for x in G.edges(data=1)],
-                         labels={ix:company for ix,company in enumerate(companies)}, 
+                         labels=nx.get_node_attributes(G,'company'), 
                          font_weight='bold')
         plt.axis('off')
         fig.savefig('./correlation.png',bbox_inches="tight")    
@@ -98,5 +94,11 @@ def show_post(post_id):
     # show the post with the given id, the id is an integer
     return 'Post %d' % post_id
 
+#url_for('static', filename='basic_graph.html')
+    
+@app.route('/network/visualisation')
+def show_visualisation():
+    return send_file('basic_graph.html')
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0',debug=True)
