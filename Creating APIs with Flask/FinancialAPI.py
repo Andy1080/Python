@@ -16,7 +16,8 @@ import numpy as np
 from datetime import datetime, timedelta
 from networkx.readwrite import json_graph
 import json
-from flask import Flask, request, send_file, url_for
+from flask import Flask, request, send_file
+#import csv
 
 app = Flask(__name__)
 
@@ -31,11 +32,9 @@ def hello():
 
 @app.route('/company/<companyName>')
 def show_company_prices(companyName):
-    # 
-    # Example URL : http://localhost:5000/company/AAPL?startDate=2015-01-01&endDate=2015-01-10
+
     startDate =  request.args.get('startDate')
-    endDate =  request.args.get('endDate')
-    #print "Start Date is {}, End Date is {}".format(startDate, endDate)    
+    endDate =  request.args.get('endDate')   
     query = 'select * from yahoo.finance.historicaldata where symbol in ("{}") and startDate = "{}" and endDate = "{}"'.format(companyName,startDate,endDate)
     payload = {'q':query,
                'env':API_ENV,
@@ -49,14 +48,19 @@ def covariance_matrix():
     now = datetime.now()
     endDate = now - timedelta(days=1)
     endDate = endDate.strftime("%Y-%m-%d")    
-    startDate = now - timedelta(days=7)
+    startDate = now - timedelta(days=28)
     startDate = startDate.strftime("%Y-%m-%d")
-    companies = ["BABA","AMZN","MSFT","YHOO", "GOOG","IBM",#"DELL",
-                 "FB", "MER", "GS", "C", "JPM"]
-    data = np.zeros(shape=(len(companies), 7-2), dtype=float)
-    i = 0
-    for company in companies:    
-        query = 'select * from yahoo.finance.historicaldata where symbol in ("{}") and startDate = "{}" and endDate = "{}"'.format(company,startDate,endDate)
+    symbols = ["BABA","AMZN","MSFT","YHOO", "GOOG","IBM","BK","AXP","EBAY",
+                 "FB", "MER", "GS", "C", "JPM", "HPQ", "KO"]
+    
+    #with open('snp100.text','r') as w:
+    #    w_rows = csv.reader(w, delimiter='\t')
+    #    companyLookUp = {symbol:name for symbol,name in w_rows}
+    #    symbols = companyLookUp.keys()
+    
+    entries = {}
+    for symbol in symbols:    
+        query = 'select * from yahoo.finance.historicaldata where symbol in ("{}") and startDate = "{}" and endDate = "{}"'.format(symbol,startDate,endDate)
         payload = {'q':query,
                'env':API_ENV,
                'format':API_FORMAT,
@@ -64,13 +68,12 @@ def covariance_matrix():
         response = rq.get(API_BASE, params=payload).json()
             
         try:
-            for ix,entry in enumerate(response['query']['results']['quote']):
-                data[i,ix] = entry['Close']
-            i+=1
+            entries[symbol] = [x['Close'] for x in response['query']['results']['quote']]
         except:
             print response
     
-    correlation = np.corrcoef(data)
+    correlation = np.corrcoef(np.vstack(entries.values()).astype(float))
+    companies = entries.keys()
     correlation = np.where(abs(correlation)<0.75,0,correlation)
     G = nx.Graph(correlation)
     nx.set_node_attributes(G,'company',{ix:company for ix,company in enumerate(companies)})
@@ -88,17 +91,6 @@ def covariance_matrix():
         plt.axis('off')
         fig.savefig('./correlation.png',bbox_inches="tight")    
         return send_file('correlation.png', mimetype='image/png')
-
-@app.route('/post/<int:post_id>')
-def show_post(post_id):
-    # show the post with the given id, the id is an integer
-    return 'Post %d' % post_id
-
-#url_for('static', filename='basic_graph.html')
-    
-@app.route('/network/visualisation')
-def show_visualisation():
-    return send_file('basic_graph.html')
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0',debug=True)
